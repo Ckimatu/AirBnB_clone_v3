@@ -1,41 +1,92 @@
 #!/usr/bin/python3
-"""Module for User related endpoints"""
+"""users"""
 from api.v1.views import app_views
-from api.v1.views import *
-from flask import jsonify, make_response, abort, request
+from flask import jsonify, abort, request
 from models import storage
 from models.user import User
+from datetime import datetime
+import uuid
 
-model = "User"
+
+@app_views.route('/users/', methods=['GET'])
+@app_views.route('/users', methods=['GET'])
+def list_users():
+    '''Retrieves a list of all User objects'''
+    list_users = [obj.to_dict() for obj in storage.all("User").values()]
+    return jsonify(list_users)
 
 
-@app_views.route("/users", strict_slashes=False,
-                 methods=["GET"], defaults={"user_id": None})
-@app_views.route("/users/<user_id>", methods=["GET"])
+@app_views.route('/users/<user_id>', methods=['GET'])
 def get_user(user_id):
-    """GET /user api route"""
-    if not user_id:
-        list_objs = [v.to_dict() for v in storage.all(model).values()]
-        return jsonify(list_objs)
+    '''Retrieves a User object'''
+    all_users = storage.all("User").values()
+    user_obj = [obj.to_dict() for obj in all_users if obj.id == user_id]
+    if user_obj == []:
+        abort(404)
+    return jsonify(user_obj[0])
 
-    return get_model(model, user_id)
 
-
-@app_views.route("/users/<user_id>", methods=["DELETE"])
+@app_views.route('/users/<user_id>', methods=['DELETE'])
 def delete_user(user_id):
-    """DELETE /user api route"""
-    return delete_model(model, user_id)
+    '''Deletes a User object'''
+    all_users = storage.all("User").values()
+    user_obj = [obj.to_dict() for obj in all_users if obj.id == user_id]
+    if user_obj == []:
+        abort(404)
+    user_obj.remove(user_obj[0])
+    for obj in all_users:
+        if obj.id == user_id:
+            storage.delete(obj)
+            storage.save()
+    return jsonify({}), 200
 
 
-@app_views.route("/users", strict_slashes=False, methods=["POST"])
-def post_user():
-    """POST /user api route"""
-    required_data = {"email", "password"}
-    return post_model(model, None, None, required_data)
+@app_views.route('/users/', methods=['POST'])
+def create_user():
+    '''Creates a User'''
+    if not request.get_json():
+        abort(400, 'Not a JSON')
+    if 'email' not in request.get_json():
+        abort(400, 'Missing name')
+    if 'password' not in request.get_json():
+        abort(400, 'Missing name')
+    users = []
+    new_user = User(email=request.json['email'],
+                    password=request.json['password'])
+    storage.new(new_user)
+    storage.save()
+    users.append(new_user.to_dict())
+    return jsonify(users[0]), 201
 
 
-@app_views.route("/users/<user_id>", methods=["PUT"])
-def put_user(user_id):
-    """PUT /user api route"""
-    ignore_data = ["id", "created_at", "updated_at", "email"]
-    return put_model(model, user_id, ignore_data)
+@app_views.route('/users/<user_id>', methods=['PUT'])
+def updates_user(user_id):
+    '''Updates a User object'''
+    all_users = storage.all("User").values()
+    user_obj = [obj.to_dict() for obj in all_users if obj.id == user_id]
+    if user_obj == []:
+        abort(404)
+    if not request.get_json():
+        abort(400, 'Not a JSON')
+    try:
+        user_obj[0]['first_name'] = request.json['first_name']
+    except:
+        pass
+    try:
+        user_obj[0]['last_name'] = request.json['last_name']
+    except:
+        pass
+    for obj in all_users:
+        if obj.id == user_id:
+            try:
+                if request.json['first_name'] is not None:
+                    obj.first_name = request.json['first_name']
+            except:
+                pass
+            try:
+                if request.json['last_name'] is not None:
+                    obj.last_name = request.json['last_name']
+            except:
+                pass
+    storage.save()
+    return jsonify(user_obj[0]), 200
